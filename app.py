@@ -81,7 +81,7 @@ def main():
         st.session_state.chat_history = None
 
     st.header("Understand Customer Interviews Better :rocket:")
-    user_question = st.text_input("Ask a question about your user interviews")
+    user_question = st.chat_input("Ask a question about your user interviews")
 
     
     if user_question:
