@@ -70,7 +70,7 @@ def handle_userinput(user_question):
     
 def main():
     load_dotenv()
-    st.set_page_config(page_title="thnkrAI", page_icon="favicon-transparent-256x256.png") 
+    st.set_page_config(page_title="thnkrAI", page_icon="favicon-transparent-256x256.png", layout="centered") 
     st.write(css, unsafe_allow_html=True)
        
 
