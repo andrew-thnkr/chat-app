@@ -1,5 +1,4 @@
 import streamlit as st
-from dotenv import load_dotenv
 from PyPDF2 import PdfReader
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.embeddings import OpenAIEmbeddings
@@ -48,7 +47,7 @@ def get_conversation_chain(vectorstore):
 
 def handle_userinput(user_question):
     if st.session_state.conversation is None:
-        st.write("Please upload your customer interview information to begin.")
+        st.write("Please upload your customer interview information or paste text to begin.")
         return
 
     # Update chat history with user input
@@ -68,28 +67,10 @@ def handle_userinput(user_question):
     # Display bot response
     st.write(bot_template.replace("{{MSG}}", response['answer']), unsafe_allow_html=True)
 
-def extract_insights():
-    if "interview_data" not in st.session_state:
-        st.session_state.interview_data = []
-
-    # Extract unique insights from text chunks
-    for chunk in st.session_state.text_chunks:
-        question = f"What is the unique insight for this section:\n{chunk}"
-        response = st.session_state.conversation({'question': question})
-        insight = response['answer']
-        st.session_state.interview_data.append({"Unique Insight": insight})
-
-def display_interview_table():
-    if "interview_data" in st.session_state and st.session_state.interview_data:
-        df = pd.DataFrame(st.session_state.interview_data)
-        st.table(df)
 
 def main():
-    load_dotenv()
     st.set_page_config(page_title="thnkrAI", page_icon="favicon-transparent-256x256.png", layout="centered") 
     st.write(css, unsafe_allow_html=True)
-
-    
 
     if "conversation" not in st.session_state:
         st.session_state.conversation = None
@@ -103,25 +84,37 @@ def main():
     if user_question:
         handle_userinput(user_question)
 
-    if "raw_text" in st.session_state:
-        extract_insights()
-        display_interview_table()
-
     with st.sidebar:
-        st.logo("logo-transparent-png (1).png")
+        st.image("logo-transparent-png (1).png", use_column_width=True)
         st.subheader("Your Interview Docs")
         pdf_docs = st.file_uploader(
             "Upload your interview notes or transcripts", accept_multiple_files=True)
 
-        if st.button("Upload"):
-            with st.spinner("Uploading"):
-                # get pdf contents
-                raw_text = get_pdf_text(pdf_docs)
-                st.session_state.raw_text = raw_text
-                st.write(raw_text)
+        if pdf_docs:
+            if st.button("Upload"):
+                with st.spinner("Uploading"):
+                    # get pdf contents
+                    raw_text = get_pdf_text(pdf_docs)
+                    st.session_state.raw_text = raw_text
+                    st.write(raw_text)
 
-                # break pdf contents into text chunks
-                text_chunks = get_text_chunks(raw_text)
+                    # break pdf contents into text chunks
+                    text_chunks = get_text_chunks(raw_text)
+                    st.session_state.text_chunks = text_chunks
+
+                    # create vector store
+                    vectorstore = get_vectorstore(text_chunks)
+
+                    # conversation chain created
+                    st.session_state.conversation = get_conversation_chain(vectorstore)
+
+        st.subheader("Or Paste Text")
+        user_text = st.text_area("Paste text here")
+
+        if user_text:
+            if st.button("Process Text"):
+                # process the user-pasted text
+                text_chunks = get_text_chunks(user_text)
                 st.session_state.text_chunks = text_chunks
 
                 # create vector store
@@ -129,6 +122,7 @@ def main():
 
                 # conversation chain created
                 st.session_state.conversation = get_conversation_chain(vectorstore)
+
 
 if __name__ == '__main__':
     main()
