@@ -116,6 +116,7 @@ def main():
                 # process the user-pasted text
                 text_chunks = get_text_chunks(user_text)
                 st.session_state.text_chunks = text_chunks
+                st.write(user_text)
 
                 # create vector store
                 vectorstore = get_vectorstore(text_chunks)
