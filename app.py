@@ -68,6 +68,21 @@ def handle_userinput(user_question):
     # Display bot response
     st.write(bot_template.replace("{{MSG}}", response['answer']), unsafe_allow_html=True)
 
+def display_suggestions():
+    if "suggestions" not in st.session_state:
+        st.session_state.suggestions = [
+            "Summarize my interviews",
+            "What are the key insights?",
+            "What are the patterns?",
+            "What are the problems?",
+        ]
+    
+    cols = st.columns(len(st.session_state.suggestions))
+    for i, suggestion in enumerate(st.session_state.suggestions):
+        if cols[i].button(suggestion):
+            return suggestion
+    return None
+
 
 def main():
     st.set_page_config(page_title="thnkrAI", page_icon="favicon-transparent-256x256.png", layout="centered") 
@@ -80,10 +95,15 @@ def main():
         st.session_state.chat_history = []
 
     st.header("Understand Customer Interviews Better :rocket:")
+
+    selected_suggestion = display_suggestions()
+    
     user_question = st.chat_input("Ask a question about your user interviews")
 
     if user_question:
         handle_userinput(user_question)
+    elif selected_suggestion:
+        handle_userinput(selected_suggestion)
 
     with st.sidebar:
         st.image("logo-transparent-png (1).png", use_column_width=True)
