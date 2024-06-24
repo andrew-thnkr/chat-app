@@ -59,10 +59,11 @@ def handle_userinput(user_question):
             st.write(user_template.replace("{{MSG}}", message["content"]), unsafe_allow_html=True)
         else:
             st.write(bot_template.replace("{{MSG}}", message["content"]), unsafe_allow_html=True)
-
-    # Get response from conversation chain
-    response = st.session_state.conversation({'question': user_question})
-    st.session_state.chat_history.append({"type": "bot", "content": response['answer']})
+    
+    with st.spinner("Thinking..."):
+        # Get response from conversation chain
+        response = st.session_state.conversation({'question': user_question})
+        st.session_state.chat_history.append({"type": "bot", "content": response['answer']})
 
     # Display bot response
     st.write(bot_template.replace("{{MSG}}", response['answer']), unsafe_allow_html=True)
