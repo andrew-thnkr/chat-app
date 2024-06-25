@@ -8,6 +8,11 @@ from langchain.chains import ConversationalRetrievalChain
 from langchain.chat_models import ChatOpenAI
 from htmlTemplates import css, bot_template, user_template
 import pandas as pd
+#from dotenv import load_dotenv
+
+##load_dotenv()
+
+
 
 def get_pdf_text(pdf_docs):
     text = ""
@@ -59,13 +64,29 @@ def handle_userinput(user_question):
             st.write(user_template.replace("{{MSG}}", message["content"]), unsafe_allow_html=True)
         else:
             st.write(bot_template.replace("{{MSG}}", message["content"]), unsafe_allow_html=True)
-
-    # Get response from conversation chain
-    response = st.session_state.conversation({'question': user_question})
-    st.session_state.chat_history.append({"type": "bot", "content": response['answer']})
+    
+    with st.spinner("Thinking..."):
+        # Get response from conversation chain
+        response = st.session_state.conversation({'question': user_question})
+        st.session_state.chat_history.append({"type": "bot", "content": response['answer']})
 
     # Display bot response
     st.write(bot_template.replace("{{MSG}}", response['answer']), unsafe_allow_html=True)
+
+def display_suggestions():
+    if "suggestions" not in st.session_state:
+        st.session_state.suggestions = [
+            "Summarize my interviews",
+            "What are the key insights?",
+            "What are the patterns?",
+            "What are the problems?",
+        ]
+    
+    cols = st.columns(len(st.session_state.suggestions))
+    for i, suggestion in enumerate(st.session_state.suggestions):
+        if cols[i].button(suggestion):
+            return suggestion
+    return None
 
 
 def main():
@@ -79,10 +100,14 @@ def main():
         st.session_state.chat_history = []
 
     st.header("Understand Customer Interviews Better :rocket:")
+    selected_suggestion = display_suggestions()
     user_question = st.chat_input("Ask a question about your user interviews")
 
     if user_question:
         handle_userinput(user_question)
+    elif selected_suggestion:
+        handle_userinput(selected_suggestion)
+
 
     with st.sidebar:
         st.image("logo-transparent-png (1).png", use_column_width=True)
@@ -116,6 +141,7 @@ def main():
                 # process the user-pasted text
                 text_chunks = get_text_chunks(user_text)
                 st.session_state.text_chunks = text_chunks
+                st.write(user_text)
 
                 # create vector store
                 vectorstore = get_vectorstore(text_chunks)
