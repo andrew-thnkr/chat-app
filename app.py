@@ -69,9 +69,29 @@ def handle_userinput(user_question):
         # Get response from conversation chain
         response = st.session_state.conversation({'question': user_question})
         st.session_state.chat_history.append({"type": "bot", "content": response['answer']})
+    
+    with st.spinner("Thinking..."):
+        # Get response from conversation chain
+        response = st.session_state.conversation({'question': user_question})
+        st.session_state.chat_history.append({"type": "bot", "content": response['answer']})
 
     # Display bot response
     st.write(bot_template.replace("{{MSG}}", response['answer']), unsafe_allow_html=True)
+
+def display_suggestions():
+    if "suggestions" not in st.session_state:
+        st.session_state.suggestions = [
+            "Summarize my interviews",
+            "What are the key insights?",
+            "What are the patterns?",
+            "What are the problems?",
+        ]
+    
+    cols = st.columns(len(st.session_state.suggestions))
+    for i, suggestion in enumerate(st.session_state.suggestions):
+        if cols[i].button(suggestion):
+            return suggestion
+    return None
 
 def display_suggestions():
     if "suggestions" not in st.session_state:
@@ -141,6 +161,7 @@ def main():
                 # process the user-pasted text
                 text_chunks = get_text_chunks(user_text)
                 st.session_state.text_chunks = text_chunks
+                st.write(user_text)
                 st.write(user_text)
 
                 # create vector store
