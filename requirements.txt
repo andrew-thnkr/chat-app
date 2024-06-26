@@ -4,13 +4,13 @@ python-dotenv==1.0.0
 streamlit==1.36.0
 openai==0.27.6
 faiss-cpu==1.7.4
-altair==4.0.0
+altair==4.2.2
 tiktoken==0.4.0
-pandas==1.5.3
 google-auth==2.19.1
 google-auth-oauthlib==1.0.0
+google-api-python-client==2.92.0
 google-auth-httplib2==0.1.0
-google-api-python-client==2.134.0
+
 # uncomment to use huggingface llms
 # huggingface-hub==0.14.1
 
