@@ -8,11 +8,83 @@ from langchain.chains import ConversationalRetrievalChain
 from langchain.chat_models import ChatOpenAI
 from htmlTemplates import css, bot_template, user_template
 import pandas as pd
-#from dotenv import load_dotenv
+from dotenv import load_dotenv
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import Flow
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseDownload
+import io
+import os
+import json
 
-##load_dotenv()
+load_dotenv()
 
+SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
 
+def create_google_drive_service(credentials):
+    return build('drive', 'v3', credentials=credentials)
+
+os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'  # To allow OAuth on http for localhost
+
+def authenticate_google_drive():
+    flow = Flow.from_client_secrets_file(
+        'client_secret.json',  # Make sure this path is correct
+        scopes=['https://www.googleapis.com/auth/drive.readonly'],
+        redirect_uri='http://localhost:8501'  # Streamlit's default port
+    )
+
+    authorization_url, _ = flow.authorization_url(prompt='consent')
+
+    st.write("Please authenticate with Google Drive")
+    st.write(f"[Click here to authenticate]({authorization_url})")
+
+    # Wait for the redirect
+    query_params = st.experimental_get_query_params()
+    #st.write("Query Params: ", query_params)  # Debugging statement
+
+    if 'code' not in query_params:
+        st.stop()
+    
+    code = query_params['code'][0]  # Extract the code from the list
+    flow.fetch_token(code=code)
+    credentials = flow.credentials
+
+    # Store credentials securely
+    with open('token.json', 'w') as token:
+        token.write(credentials.to_json())
+
+    return credentials
+
+def fetch_google_drive_files(service):
+    results = service.files().list(
+        pageSize=50,
+        fields="nextPageToken, files(id, name, mimeType)"
+    ).execute()
+    files = results.get('files', [])
+    #st.write("Fetched Files: ", files)  # Debugging statement
+    return files
+
+def download_file(service, file_id, mime_type):
+    if mime_type == 'application/vnd.google-apps.document':
+        # For Google Docs
+        request = service.files().export_media(fileId=file_id, mimeType='text/plain')
+    elif mime_type == 'application/pdf':
+        # For PDF files
+        request = service.files().get_media(fileId=file_id)
+    elif mime_type == 'text/plain':
+        # For plain text files
+        request = service.files().get_media(fileId=file_id)
+    else:
+        st.error(f"Unsupported file type: {mime_type}")
+        return None
+
+    fh = io.BytesIO()
+    downloader = MediaIoBaseDownload(fh, request)
+    done = False
+    while done is False:
+        status, done = downloader.next_chunk()
+    fh.seek(0)
+    return fh.read().decode('utf-8')
 
 def get_pdf_text(pdf_docs):
     text = ""
@@ -88,7 +160,6 @@ def display_suggestions():
             return suggestion
     return None
 
-
 def main():
     st.set_page_config(page_title="thnkrAI", page_icon="favicon-transparent-256x256.png", layout="centered") 
     st.write(css, unsafe_allow_html=True)
@@ -108,13 +179,48 @@ def main():
     elif selected_suggestion:
         handle_userinput(selected_suggestion)
 
-
     with st.sidebar:
         st.image("logo-transparent-png (1).png", use_column_width=True)
         st.subheader("Your Interview Docs")
+        if 'google_credentials' not in st.session_state:
+            if st.button("Connect to Google Drive"):
+                st.session_state.google_credentials = authenticate_google_drive()
+                if st.session_state.google_credentials:
+                    st.success("Successfully connected to Google Drive!")
+                    st.rerun()  # Rerun the app to update the sidebar
+
+        if 'google_credentials' in st.session_state:
+            service = create_google_drive_service(st.session_state.google_credentials)
+            files = fetch_google_drive_files(service)
+            
+            relevant_files = [file for file in files if file['mimeType'] in 
+                ['text/plain', 'application/vnd.google-apps.document', 'application/pdf']]
+
+            selected_files = st.multiselect(
+                "Select files from Google Drive",
+                options=[f['name'] for f in relevant_files]
+            )
+
+            if selected_files and st.button("Process Selected Files"):
+                with st.spinner("Processing files..."):
+                    combined_text = ""
+                    for file_name in selected_files:
+                        file = next(f for f in relevant_files if f['name'] == file_name)
+                        file_content = download_file(service, file['id'], file['mimeType'])
+                        if file_content:
+                            combined_text += f"File: {file_name}\n\n{file_content}\n\n"
+
+                    if combined_text:
+                        text_chunks = get_text_chunks(combined_text)
+                        vectorstore = get_vectorstore(text_chunks)
+                        st.session_state.conversation = get_conversation_chain(vectorstore)
+                        st.success("Files processed successfully!")
+                    else:
+                        st.error("Failed to retrieve file content")
+        
         pdf_docs = st.file_uploader(
             "Upload your interview notes or transcripts", accept_multiple_files=True)
-
+            
         if pdf_docs:
             if st.button("Upload"):
                 with st.spinner("Uploading"):
@@ -122,7 +228,7 @@ def main():
                     raw_text = get_pdf_text(pdf_docs)
                     st.session_state.raw_text = raw_text
                     st.write(raw_text)
-
+                   
                     # break pdf contents into text chunks
                     text_chunks = get_text_chunks(raw_text)
                     st.session_state.text_chunks = text_chunks
@@ -135,20 +241,14 @@ def main():
 
         st.subheader("Or Paste Text")
         user_text = st.text_area("Paste text here")
-
+       
         if user_text:
             if st.button("Process Text"):
-                # process the user-pasted text
-                text_chunks = get_text_chunks(user_text)
-                st.session_state.text_chunks = text_chunks
-                st.write(user_text)
-
-                # create vector store
-                vectorstore = get_vectorstore(text_chunks)
-
-                # conversation chain created
-                st.session_state.conversation = get_conversation_chain(vectorstore)
-
+                with st.spinner("Processing"):
+                    text_chunks = get_text_chunks(user_text)
+                    vectorstore = get_vectorstore(text_chunks)
+                    st.session_state.conversation = get_conversation_chain(vectorstore)
+                st.success("Text processed successfully!")
 
 if __name__ == '__main__':
     main()
