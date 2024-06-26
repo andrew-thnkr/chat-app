@@ -8,7 +8,7 @@ from langchain.chains import ConversationalRetrievalChain
 from langchain.chat_models import ChatOpenAI
 from htmlTemplates import css, bot_template, user_template
 import pandas as pd
-#from dotenv import load_dotenv
+from dotenv import load_dotenv
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
@@ -17,7 +17,7 @@ import io
 import os
 import json
 
-#load_dotenv()
+load_dotenv()
 
 SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
 
