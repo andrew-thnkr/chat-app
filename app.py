@@ -61,8 +61,8 @@ def authenticate_google_drive():
         st.session_state.google_auth_state = {}
 
     # Debug information
-    st.write(f"Session state: {st.session_state.google_auth_state}")
-    st.write(f"Query params: {st.query_params}")
+    #st.write(f"Session state: {st.session_state.google_auth_state}")
+    #st.write(f"Query params: {st.query_params}")
 
     # Handle the redirect from Google
     if "code" in st.query_params:
