@@ -46,41 +46,53 @@ def create_google_drive_service(credentials):
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'  # To allow OAuth on http for localhost
 
 def authenticate_google_drive():
-    redirect_uri = "https://thnkrai-customer.streamlit.app" if st.secrets.get("production", False) else "http://localhost:8501"
+    st.write("Starting Google Drive authentication...")
     
+    # Set up the OAuth flow
+    redirect_uri = st.secrets["PRODUCTION_URL"] if "PRODUCTION_URL" in st.secrets else "http://localhost:8501"
     flow = Flow.from_client_config(
         client_secret_info,
         scopes=SCOPES,
         redirect_uri=redirect_uri
     )
     
+    # Initialize session state
     if 'google_auth_state' not in st.session_state:
         st.session_state.google_auth_state = {}
 
-    # Check if we have a code in the URL parameters
-    query_params = st.experimental_get_query_params()
-    if "code" in query_params:
-        code = query_params["code"][0]
+    # Debug information
+    st.write(f"Session state: {st.session_state.google_auth_state}")
+    st.write(f"Query params: {st.query_params}")
+
+    # Handle the redirect from Google
+    if "code" in st.query_params:
+        st.write("Received code from Google, attempting to fetch token...")
         try:
-            flow.fetch_token(code=code)
+            flow.fetch_token(code=st.query_params["code"])
             st.session_state.google_auth_state['credentials'] = flow.credentials
             st.success("Successfully authenticated with Google Drive!")
-            # Clear the URL parameters
-            st.experimental_set_query_params()
             st.rerun()
         except Exception as e:
             st.error(f"An error occurred during authentication: {str(e)}")
+            st.write(f"Error details: {e}")
     
+    # If not authenticated, provide the authorization URL
     if 'credentials' not in st.session_state.google_auth_state:
         if 'auth_url' not in st.session_state.google_auth_state:
             authorization_url, _ = flow.authorization_url(prompt='consent')
             st.session_state.google_auth_state['auth_url'] = authorization_url
 
-        st.write("Click the button below to authorize the application:")
+        #st.write("Click the button below to authorize the application:")
+        auth_url = st.session_state.google_auth_state['auth_url']
+        
+        # Create a button that opens the auth URL in a new tab
         if st.button("Connect to Google Drive"):
-            webbrowser.open(st.session_state.google_auth_state['auth_url'])
-            st.info("After authorizing, you will be redirected back to this app. Please wait...")
-    
+            js = f"window.open('{auth_url}', '_blank');"
+            html = f'<script>{js}</script>'
+            st.components.v1.html(html, height=0)
+        
+        st.info("After authorizing, you will be redirected back to this app. Please wait...")
+
     return st.session_state.google_auth_state.get('credentials')
 
 def fetch_google_drive_files(service):
