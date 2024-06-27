@@ -19,6 +19,12 @@ import json
 
 load_dotenv()
 
+secrets = st.secrets
+
+# Parsing the JSON strings stored in the TOML file
+token_info = json.loads(secrets["token"]["token"])
+client_secret_info = json.loads(secrets["client_secret"]["client_secret"])
+
 SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
 
 def create_google_drive_service(credentials):
@@ -27,32 +33,13 @@ def create_google_drive_service(credentials):
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'  # To allow OAuth on http for localhost
 
 def authenticate_google_drive():
-    flow = Flow.from_client_secrets_file(
-        '.streamlit/secrets.toml',  # Make sure this path is correct
-        scopes=['https://www.googleapis.com/auth/drive.readonly'],
-        redirect_uri='http://localhost:8501'  # Streamlit's default port
+    # Use the parsed JSON objects
+    flow = Flow.from_client_config(
+        client_secret_info,
+        scopes=SCOPES
     )
-
-    authorization_url, _ = flow.authorization_url(prompt='consent')
-
-    st.write("Please authenticate with Google Drive")
-    st.write(f"[Click here to authenticate]({authorization_url})")
-
-    # Wait for the redirect
-    query_params = st.experimental_get_query_params()
-    #st.write("Query Params: ", query_params)  # Debugging statement
-
-    if 'code' not in query_params:
-        st.stop()
-    
-    code = query_params['code'][0]  # Extract the code from the list
-    flow.fetch_token(code=code)
+    flow.run_local_server(port=0)
     credentials = flow.credentials
-
-    # Store credentials securely
-    with open('token.json', 'w') as token:
-        token.write(credentials.to_json())
-
     return credentials
 
 def fetch_google_drive_files(service):
@@ -61,18 +48,12 @@ def fetch_google_drive_files(service):
         fields="nextPageToken, files(id, name, mimeType)"
     ).execute()
     files = results.get('files', [])
-    #st.write("Fetched Files: ", files)  # Debugging statement
     return files
 
 def download_file(service, file_id, mime_type):
     if mime_type == 'application/vnd.google-apps.document':
-        # For Google Docs
         request = service.files().export_media(fileId=file_id, mimeType='text/plain')
-    elif mime_type == 'application/pdf':
-        # For PDF files
-        request = service.files().get_media(fileId=file_id)
-    elif mime_type == 'text/plain':
-        # For plain text files
+    elif mime_type in ['application/pdf', 'text/plain']:
         request = service.files().get_media(fileId=file_id)
     else:
         st.error(f"Unsupported file type: {mime_type}")
@@ -81,7 +62,7 @@ def download_file(service, file_id, mime_type):
     fh = io.BytesIO()
     downloader = MediaIoBaseDownload(fh, request)
     done = False
-    while done is False:
+    while not done:
         status, done = downloader.next_chunk()
     fh.seek(0)
     return fh.read().decode('utf-8')
@@ -187,19 +168,13 @@ def main():
                 st.session_state.google_credentials = authenticate_google_drive()
                 if st.session_state.google_credentials:
                     st.success("Successfully connected to Google Drive!")
-                    st.rerun()  # Rerun the app to update the sidebar
+                    st.rerun()
 
-        if 'google_credentials' in st.session_state:
+        if "google_credentials" in st.session_state:
             service = create_google_drive_service(st.session_state.google_credentials)
             files = fetch_google_drive_files(service)
-            
-            relevant_files = [file for file in files if file['mimeType'] in 
-                ['text/plain', 'application/vnd.google-apps.document', 'application/pdf']]
-
-            selected_files = st.multiselect(
-                "Select files from Google Drive",
-                options=[f['name'] for f in relevant_files]
-            )
+            relevant_files = [file for file in files if file['mimeType'] in ['text/plain', 'application/vnd.google-apps.document', 'application/pdf']]
+            selected_files = st.multiselect("Select files from Google Drive", options=[f['name'] for f in relevant_files])
 
             if selected_files and st.button("Process Selected Files"):
                 with st.spinner("Processing files..."):
