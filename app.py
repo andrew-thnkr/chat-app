@@ -8,7 +8,7 @@ from langchain.chains import ConversationalRetrievalChain
 from langchain.chat_models import ChatOpenAI
 from htmlTemplates import css, bot_template, user_template
 import pandas as pd
-from dotenv import load_dotenv
+#from dotenv import load_dotenv
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
@@ -16,16 +16,25 @@ from googleapiclient.http import MediaIoBaseDownload
 import io
 import os
 import json
+import webbrowser
 
-load_dotenv()
+#load_dotenv()
 
-# Accessing secrets from st.secrets
 openai_api_key = st.secrets["OPENAI_API_KEY"]
 huggingfacehub_api_token = st.secrets["HUGGINGFACEHUB_API_TOKEN"]
 
-# Parsing the JSON strings stored in the TOML file
-token_info = json.loads(st.secrets["token"]["token"])
-client_secret_info = json.loads(st.secrets["client_secret"]["client_secret"])
+
+client_secret_info = {
+    "installed": {
+        "client_id": st.secrets["google_oauth"]["client_id"],
+        "project_id": st.secrets["google_oauth"]["project_id"],
+        "auth_uri": st.secrets["google_oauth"]["auth_uri"],
+        "token_uri": st.secrets["google_oauth"]["token_uri"],
+        "auth_provider_x509_cert_url": st.secrets["google_oauth"]["auth_provider_x509_cert_url"],
+        "client_secret": st.secrets["google_oauth"]["client_secret"],
+        "redirect_uris": st.secrets["google_oauth"]["redirect_uris"]
+    }
+}
 
 SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
 
@@ -35,14 +44,40 @@ def create_google_drive_service(credentials):
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'  # To allow OAuth on http for localhost
 
 def authenticate_google_drive():
-    # Use the parsed JSON objects
     flow = Flow.from_client_config(
         client_secret_info,
-        scopes=SCOPES
+        scopes=SCOPES,
+        redirect_uri=st.secrets["google_oauth"]["redirect_uris"][0]
     )
-    flow.run_local_server(port=0)
-    credentials = flow.credentials
-    return credentials
+    
+    if 'google_auth_state' not in st.session_state:
+        st.session_state.google_auth_state = {}
+
+    # Check if we have a code in the URL parameters
+    query_params = st.experimental_get_query_params()
+    if "code" in query_params:
+        code = query_params["code"][0]
+        try:
+            flow.fetch_token(code=code)
+            st.session_state.google_auth_state['credentials'] = flow.credentials
+            st.success("Successfully authenticated with Google Drive!")
+            # Clear the URL parameters
+            st.experimental_set_query_params()
+            st.rerun()
+        except Exception as e:
+            st.error(f"An error occurred during authentication: {str(e)}")
+    
+    if 'credentials' not in st.session_state.google_auth_state:
+        if 'auth_url' not in st.session_state.google_auth_state:
+            authorization_url, _ = flow.authorization_url(prompt='consent')
+            st.session_state.google_auth_state['auth_url'] = authorization_url
+
+        st.write("Click the button below to authorize the application:")
+        if st.button("Connect to Google Drive"):
+            webbrowser.open(st.session_state.google_auth_state['auth_url'])
+            st.info("After authorizing, you will be redirected back to this app. Please wait...")
+    
+    return st.session_state.google_auth_state.get('credentials')
 
 def fetch_google_drive_files(service):
     results = service.files().list(
@@ -170,19 +205,16 @@ def main():
     with st.sidebar:
         st.image("logo-transparent-png (1).png", use_column_width=True)
         st.subheader("Your Interview Docs")
+        
         if 'google_credentials' not in st.session_state:
-            if st.button("Connect to Google Drive"):
-                st.session_state.google_credentials = authenticate_google_drive()
-                if st.session_state.google_credentials:
-                    st.success("Successfully connected to Google Drive!")
-                    st.rerun()  # Rerun the app to update the sidebar
+            credentials = authenticate_google_drive()
+            if credentials:
+                st.session_state.google_credentials = credentials
+                st.rerun()
 
-        st.title("Google Drive Authentication")
-        if "google_credentials" not in st.session_state:
-            st.session_state.google_credentials = authenticate_google_drive()
-            
-            relevant_files = [file for file in files if file['mimeType'] in 
-                ['text/plain', 'application/vnd.google-apps.document', 'application/pdf']]
+        if "google_credentials" in st.session_state:
+            service = create_google_drive_service(st.session_state.google_credentials)
+            relevant_files = fetch_google_drive_files(service)
 
             selected_files = st.multiselect(
                 "Select files from Google Drive",
@@ -205,7 +237,7 @@ def main():
                         st.success("Files processed successfully!")
                     else:
                         st.error("Failed to retrieve file content")
-        
+
         pdf_docs = st.file_uploader(
             "Upload your interview notes or transcripts", accept_multiple_files=True)
             
@@ -236,7 +268,6 @@ def main():
                     text_chunks = get_text_chunks(user_text)
                     vectorstore = get_vectorstore(text_chunks)
                     st.session_state.conversation = get_conversation_chain(vectorstore)
-                st.success("Text processed successfully!")
 
 if __name__ == '__main__':
     main()
