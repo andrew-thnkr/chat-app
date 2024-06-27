@@ -24,6 +24,7 @@ openai_api_key = st.secrets["OPENAI_API_KEY"]
 huggingfacehub_api_token = st.secrets["HUGGINGFACEHUB_API_TOKEN"]
 
 
+
 client_secret_info = {
     "installed": {
         "client_id": st.secrets["google_oauth"]["client_id"],
@@ -36,6 +37,7 @@ client_secret_info = {
     }
 }
 
+
 SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
 
 def create_google_drive_service(credentials):
@@ -44,10 +46,12 @@ def create_google_drive_service(credentials):
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'  # To allow OAuth on http for localhost
 
 def authenticate_google_drive():
+    redirect_uri = "https://thnkrai-customer.streamlit.app" if st.secrets.get("production", False) else "http://localhost:8501"
+    
     flow = Flow.from_client_config(
         client_secret_info,
         scopes=SCOPES,
-        redirect_uri=st.secrets["google_oauth"]["redirect_uris"][0]
+        redirect_uri=redirect_uri
     )
     
     if 'google_auth_state' not in st.session_state:
@@ -280,6 +284,7 @@ def main():
                     text_chunks = get_text_chunks(user_text)
                     vectorstore = get_vectorstore(text_chunks)
                     st.session_state.conversation = get_conversation_chain(vectorstore)
+
 
 if __name__ == '__main__':
     main()
