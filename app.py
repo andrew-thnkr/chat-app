@@ -46,7 +46,7 @@ def create_google_drive_service(credentials):
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'  # To allow OAuth on http for localhost
 
 def authenticate_google_drive():
-    st.write("Starting Google Drive authentication...")
+    #st.write("Starting Google Drive authentication...")
     
     # Set up the OAuth flow
     redirect_uri = st.secrets["PRODUCTION_URL"] if "PRODUCTION_URL" in st.secrets else st.write('error')
@@ -91,7 +91,7 @@ def authenticate_google_drive():
             html = f'<script>{js}</script>'
             st.components.v1.html(html, height=0)
         
-        st.info("After authorizing, you will be redirected back to this app. Please wait...")
+        st.info("After authorizing, you will be redirected back to this app.")
 
     return st.session_state.google_auth_state.get('credentials')
 
