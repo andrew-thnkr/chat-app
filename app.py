@@ -19,11 +19,13 @@ import json
 
 load_dotenv()
 
-secrets = st.secrets
+# Accessing secrets from st.secrets
+openai_api_key = st.secrets["OPENAI_API_KEY"]
+huggingfacehub_api_token = st.secrets["HUGGINGFACEHUB_API_TOKEN"]
 
 # Parsing the JSON strings stored in the TOML file
-token_info = json.loads(secrets["token"])
-client_secret_info = json.loads(secrets["client_secret"])
+token_info = json.loads(st.secrets["token"]["token"])
+client_secret_info = json.loads(st.secrets["client_secret"]["client_secret"])
 
 SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
 
@@ -48,7 +50,6 @@ def fetch_google_drive_files(service):
         fields="nextPageToken, files(id, name, mimeType)"
     ).execute()
     files = results.get('files', [])
-    #st.write("Fetched Files: ", files)  # Debugging statement
     return files
 
 def download_file(service, file_id, mime_type):
@@ -95,12 +96,12 @@ def get_text_chunks(text):
     return chunks
 
 def get_vectorstore(text_chunks):
-    embeddings = OpenAIEmbeddings()
+    embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
     vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
     return vectorstore
 
 def get_conversation_chain(vectorstore):
-    llm = ChatOpenAI()
+    llm = ChatOpenAI(api_key=openai_api_key)
     memory = ConversationBufferMemory(memory_key='chat_history', return_messages=True)
     conversation_chain = ConversationalRetrievalChain.from_llm(
         llm=llm,
