@@ -28,7 +28,7 @@ os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'  # To allow OAuth on http for lo
 
 def authenticate_google_drive():
     flow = Flow.from_client_secrets_file(
-        'client_secret.json',  # Make sure this path is correct
+        '.streamlit/secrets.toml',  # Make sure this path is correct
         scopes=['https://www.googleapis.com/auth/drive.readonly'],
         redirect_uri='http://localhost:8501'  # Streamlit's default port
     )
