@@ -49,7 +49,7 @@ def authenticate_google_drive():
     st.write("Starting Google Drive authentication...")
     
     # Set up the OAuth flow
-    redirect_uri = st.secrets["PRODUCTION_URL"] if "PRODUCTION_URL" in st.secrets else "http://localhost:8501"
+    redirect_uri = st.secrets["PRODUCTION_URL"] if "PRODUCTION_URL" in st.secrets else st.write('error')
     flow = Flow.from_client_config(
         client_secret_info,
         scopes=SCOPES,
