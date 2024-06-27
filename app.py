@@ -22,8 +22,8 @@ load_dotenv()
 secrets = st.secrets
 
 # Parsing the JSON strings stored in the TOML file
-token_info = json.loads(secrets["token"]["token"])
-client_secret_info = json.loads(secrets["client_secret"]["client_secret"])
+token_info = json.loads(secrets["token"])
+client_secret_info = json.loads(secrets["client_secret"])
 
 SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
 
@@ -48,12 +48,18 @@ def fetch_google_drive_files(service):
         fields="nextPageToken, files(id, name, mimeType)"
     ).execute()
     files = results.get('files', [])
+    #st.write("Fetched Files: ", files)  # Debugging statement
     return files
 
 def download_file(service, file_id, mime_type):
     if mime_type == 'application/vnd.google-apps.document':
+        # For Google Docs
         request = service.files().export_media(fileId=file_id, mimeType='text/plain')
-    elif mime_type in ['application/pdf', 'text/plain']:
+    elif mime_type == 'application/pdf':
+        # For PDF files
+        request = service.files().get_media(fileId=file_id)
+    elif mime_type == 'text/plain':
+        # For plain text files
         request = service.files().get_media(fileId=file_id)
     else:
         st.error(f"Unsupported file type: {mime_type}")
@@ -62,7 +68,7 @@ def download_file(service, file_id, mime_type):
     fh = io.BytesIO()
     downloader = MediaIoBaseDownload(fh, request)
     done = False
-    while not done:
+    while done is False:
         status, done = downloader.next_chunk()
     fh.seek(0)
     return fh.read().decode('utf-8')
@@ -168,13 +174,19 @@ def main():
                 st.session_state.google_credentials = authenticate_google_drive()
                 if st.session_state.google_credentials:
                     st.success("Successfully connected to Google Drive!")
-                    st.rerun()
+                    st.rerun()  # Rerun the app to update the sidebar
 
-        if "google_credentials" in st.session_state:
-            service = create_google_drive_service(st.session_state.google_credentials)
-            files = fetch_google_drive_files(service)
-            relevant_files = [file for file in files if file['mimeType'] in ['text/plain', 'application/vnd.google-apps.document', 'application/pdf']]
-            selected_files = st.multiselect("Select files from Google Drive", options=[f['name'] for f in relevant_files])
+        st.title("Google Drive Authentication")
+        if "google_credentials" not in st.session_state:
+            st.session_state.google_credentials = authenticate_google_drive()
+            
+            relevant_files = [file for file in files if file['mimeType'] in 
+                ['text/plain', 'application/vnd.google-apps.document', 'application/pdf']]
+
+            selected_files = st.multiselect(
+                "Select files from Google Drive",
+                options=[f['name'] for f in relevant_files]
+            )
 
             if selected_files and st.button("Process Selected Files"):
                 with st.spinner("Processing files..."):
