@@ -80,10 +80,22 @@ def authenticate_google_drive():
     return st.session_state.google_auth_state.get('credentials')
 
 def fetch_google_drive_files(service):
+    # Define the MIME types we're interested in
+    mime_types = [
+        'application/vnd.google-apps.document',  # Google Docs
+        'text/plain',  # Text files
+        'application/pdf'  # PDF files
+    ]
+    
+    # Construct the query string
+    query = " or ".join([f"mimeType='{mime_type}'" for mime_type in mime_types])
+    
     results = service.files().list(
+        q=query,
         pageSize=50,
         fields="nextPageToken, files(id, name, mimeType)"
     ).execute()
+    
     files = results.get('files', [])
     return files
 
