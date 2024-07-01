@@ -91,7 +91,7 @@ def authenticate_google_drive():
             html = f'<script>{js}</script>'
             st.components.v1.html(html, height=0)
         
-        st.info("After authorizing, you will be redirected back to this app.")
+        #st.info("After authorizing, you will be redirected back to this app.")
 
     return st.session_state.google_auth_state.get('credentials')
 
