@@ -16,13 +16,15 @@ from googleapiclient.http import MediaIoBaseDownload
 import io
 import os
 import json
-import webbrowser
+from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
+#import webbrowser
 
 #load_dotenv()
 
 openai_api_key = st.secrets["OPENAI_API_KEY"]
 huggingfacehub_api_token = st.secrets["HUGGINGFACEHUB_API_TOKEN"]
-
+slack_bot_token = st.secrets["SLACK_BOT_TOKEN"]
 
 
 client_secret_info = {
@@ -137,6 +139,70 @@ def download_file(service, file_id, mime_type):
     fh.seek(0)
     return fh.read().decode('utf-8')
 
+def authenticate_slack():
+    if 'slack_credentials' not in st.session_state:
+        slack_auth_url = "https://slack.com/oauth/v2/authorize?client_id=6004153764880.7387601103296&scope=incoming-webhook,chat:write&user_scope="
+        
+        if st.button("Connect to Slack"):
+            js = f"window.open('{slack_auth_url}', '_blank');"
+            html = f'<script>{js}</script>'
+            st.components.v1.html(html, height=0)
+        
+        #st.info("After authorizing with Slack, you will be redirected back to this app.")
+    else:
+        st.success("Connected to Slack")
+
+    return st.session_state.get('slack_credentials')
+    
+def handle_slack_oauth():
+    if "code" in st.query_params:
+        client_id = st.secrets["SLACK_CLIENT_ID"]
+        client_secret = st.secrets["SLACK_CLIENT_SECRET"]
+        redirect_uri = st.secrets["PRODUCTION_URL"]  # Make sure this matches your Slack app settings
+
+        oauth_client = WebClient()
+        try:
+            oauth_response = oauth_client.oauth_v2_access(
+                client_id=client_id,
+                client_secret=client_secret,
+                code=st.query_params["code"],
+                redirect_uri=redirect_uri
+            )
+            
+            # Store the bot token
+            st.session_state.slack_credentials = oauth_response['access_token']
+            st.success("Successfully connected to Slack!")
+            st.rerun()
+        except SlackApiError as e:
+            st.error(f"Error during Slack authentication: {e}")
+
+
+def generate_summary():
+    if st.session_state.conversation is None:
+        return "No conversation data available."
+    
+    summary_prompt = "Summarize the key insights from the customer interviews."
+    response = st.session_state.conversation({'question': summary_prompt})
+    return response['answer']
+
+def send_to_slack(message, channel):
+    if 'slack_credentials' not in st.session_state:
+        st.error("Not connected to Slack. Please connect to Slack first.")
+        return False
+
+    client = WebClient(token=st.session_state.slack_credentials)
+    try:
+        response = client.chat_postMessage(
+            channel=channel,
+            text=message
+        )
+        return True
+    except SlackApiError as e:
+        st.error(f"Error sending message to Slack: {e}")
+        st.error(f"Error details: {e.response['error']}")
+        return False  
+
+
 def get_pdf_text(pdf_docs):
     text = ""
     for pdf in pdf_docs:
@@ -215,6 +281,8 @@ def main():
     st.set_page_config(page_title="thnkrAI", page_icon="favicon-transparent-256x256.png", layout="centered") 
     st.write(css, unsafe_allow_html=True)
 
+    handle_slack_oauth()
+
     if "conversation" not in st.session_state:
         st.session_state.conversation = None
 
@@ -230,6 +298,18 @@ def main():
     elif selected_suggestion:
         handle_userinput(selected_suggestion)
 
+    # Add a section for sending summaries to Slack
+    if st.session_state.conversation is not None and 'slack_credentials' in st.session_state:
+        st.subheader("Send Summary to Slack")
+        channel = st.text_input("Enter Slack channel name (e.g., #general)")
+        if st.button("Send Summary"):
+            summary = generate_summary()
+            if channel and send_to_slack(summary, channel):
+                st.success(f"Summary sent to Slack channel: {channel}")
+            else:
+                st.error("Failed to send summary to Slack")
+
+
     with st.sidebar:
         st.image("logo-transparent-png (1).png", use_column_width=True)
         st.subheader("Your Interview Docs")
@@ -239,6 +319,8 @@ def main():
             if credentials:
                 st.session_state.google_credentials = credentials
                 st.rerun()
+
+        slack_credentials = authenticate_slack()
 
         if "google_credentials" in st.session_state:
             service = create_google_drive_service(st.session_state.google_credentials)
@@ -296,7 +378,6 @@ def main():
                     text_chunks = get_text_chunks(user_text)
                     vectorstore = get_vectorstore(text_chunks)
                     st.session_state.conversation = get_conversation_chain(vectorstore)
-
 
 if __name__ == '__main__':
     main()
