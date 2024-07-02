@@ -10,7 +10,7 @@ google-auth==2.19.1
 google-auth-oauthlib==1.0.0
 google-api-python-client==2.92.0
 google-auth-httplib2==0.1.0
-
+slack_sdk==3.30.0
 # uncomment to use huggingface llms
 # huggingface-hub==0.14.1
 
