@@ -186,21 +186,19 @@ def generate_summary():
     return response['answer']
 
 def send_to_slack(message, channel):
-    if 'slack_credentials' not in st.session_state:
-        st.error("Not connected to Slack. Please connect to Slack first.")
-        return False
-
     client = WebClient(token=st.session_state.slack_credentials)
     try:
-        response = client.chat_postMessage(
-            channel=channel,
-            text=message
-        )
+        response = client.chat_postMessage(channel=channel, text=message)
         return True
     except SlackApiError as e:
-        st.error(f"Error sending message to Slack: {e}")
-        st.error(f"Error details: {e.response['error']}")
-        return False  
+        error = e.response['error']
+        if error == 'not_in_channel':
+            st.error(f"Bot is not in the channel {channel}. Please invite the bot using /invite @YourBotName")
+        elif error == 'channel_not_found':
+            st.error(f"Channel {channel} not found. Please check the channel name and try again.")
+        else:
+            st.error(f"Error sending message to Slack: {error}")
+        return False
 
 
 def get_pdf_text(pdf_docs):
