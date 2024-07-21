@@ -18,6 +18,7 @@ import os
 import json
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
+from langchain.prompts import PromptTemplate
 #import webbrowser
 
 #load_dotenv()
@@ -227,14 +228,31 @@ def get_vectorstore(text_chunks):
     vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
     return vectorstore
 
+
+
 def get_conversation_chain(vectorstore):
     llm = ChatOpenAI(api_key=openai_api_key)
     memory = ConversationBufferMemory(memory_key='chat_history', return_messages=True)
+    
+    # Create a prompt template for the product manager role
+    prompt_template = PromptTemplate(
+        input_variables=["context", "question"],
+        template=(
+            "Provide detailed insights related to the information provided and question as a smart product manager with expertise in analyzing customer interviews would. "
+            "Context: {context} "
+            "Question: {question} "
+            "Response:"
+        )
+    )
+
+    # Create the ConversationalRetrievalChain
     conversation_chain = ConversationalRetrievalChain.from_llm(
         llm=llm,
         retriever=vectorstore.as_retriever(),
         memory=memory,
+        combine_docs_chain_kwargs={"prompt": prompt_template}
     )
+
     return conversation_chain
 
 def handle_userinput(user_question):
