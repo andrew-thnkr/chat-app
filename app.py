@@ -260,26 +260,11 @@ def handle_userinput(user_question):
     # Display bot response
     st.write(bot_template.replace("{{MSG}}", response['answer']), unsafe_allow_html=True)
 
-def display_suggestions():
-    if "suggestions" not in st.session_state:
-        st.session_state.suggestions = [
-            "Summarize my interviews",
-            "What are the key insights?",
-            "What are the patterns?",
-            "What are the problems?",
-        ]
-    
-    cols = st.columns(len(st.session_state.suggestions))
-    for i, suggestion in enumerate(st.session_state.suggestions):
-        if cols[i].button(suggestion):
-            return suggestion
-    return None
-
 def main():
     st.set_page_config(page_title="thnkrAI", page_icon="favicon-transparent-256x256.png", layout="centered") 
     st.write(css, unsafe_allow_html=True)
 
-    handle_slack_oauth()
+    #handle_slack_oauth()
 
     if "conversation" not in st.session_state:
         st.session_state.conversation = None
@@ -287,95 +272,96 @@ def main():
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
 
+    if "uploaded_files" not in st.session_state:
+        st.session_state.uploaded_files = []
+
     st.header("Understand Customer Interviews Better :rocket:")
-    selected_suggestion = display_suggestions()
+
+    # Move Google Drive connection to main screen
+    if 'google_credentials' not in st.session_state:
+        credentials = authenticate_google_drive()
+        if credentials:
+            st.session_state.google_credentials = credentials
+            st.rerun()
+
+    # Google Drive file selection
+    if "google_credentials" in st.session_state:
+        service = create_google_drive_service(st.session_state.google_credentials)
+        relevant_files = fetch_google_drive_files(service)
+
+        selected_files = st.multiselect(
+            "Select files from Google Drive",
+            options=[f['name'] for f in relevant_files]
+        )
+
+        new_files = [f for f in selected_files if f not in st.session_state.uploaded_files]
+        if new_files:
+            with st.spinner(f"Processing {len(new_files)} new file(s)..."):
+                combined_text = ""
+                for file_name in new_files:
+                    file = next(f for f in relevant_files if f['name'] == file_name)
+                    file_content = download_file(service, file['id'], file['mimeType'])
+                    if file_content:
+                        combined_text += f"File: {file_name}\n\n{file_content}\n\n"
+
+                if combined_text:
+                    text_chunks = get_text_chunks(combined_text)
+                    vectorstore = get_vectorstore(text_chunks)
+                    st.session_state.conversation = get_conversation_chain(vectorstore)
+                    st.session_state.uploaded_files.extend(new_files)
+                    st.success(f"Processed {len(new_files)} new file(s) successfully!")
+                else:
+                    st.error("Failed to retrieve file content")
+
+    # File upload section
+    #st.subheader("Or Upload PDF Files")
+    pdf_docs = st.file_uploader(
+        "", accept_multiple_files=True, label_visibility="hidden")
+        
+    if pdf_docs:
+        new_files = [doc for doc in pdf_docs if doc.name not in st.session_state.uploaded_files]
+        if new_files:
+            with st.spinner("Processing new files..."):
+                raw_text = get_pdf_text(new_files)
+                text_chunks = get_text_chunks(raw_text)
+                vectorstore = get_vectorstore(text_chunks)
+                st.session_state.conversation = get_conversation_chain(vectorstore)
+                st.session_state.uploaded_files.extend([doc.name for doc in new_files])
+                st.success(f"Processed {len(new_files)} new file(s) successfully!")
+
+    # Chat input
     user_question = st.chat_input("Ask a question about your user interviews")
 
     if user_question:
         handle_userinput(user_question)
-    elif selected_suggestion:
-        handle_userinput(selected_suggestion)
-
-    # Add a section for sending summaries to Slack
-    if st.session_state.conversation is not None and 'slack_credentials' in st.session_state:
-        st.subheader("Send Summary to Slack")
-        channel = st.text_input("Enter Slack channel name (e.g., #general)")
-        if st.button("Send Summary"):
-            summary = generate_summary()
-            if channel and send_to_slack(summary, channel):
-                st.success(f"Summary sent to Slack channel: {channel}")
-            else:
-                st.error("Failed to send summary to Slack")
 
 
+    # Slack summary section
+    #if st.session_state.conversation is not None and 'slack_credentials' in st.session_state:
+    #    st.subheader("Send Summary to Slack")
+    #    channel = st.text_input("Enter Slack channel name (e.g., #general)")
+    #    if st.button("Send Summary"):
+    #        summary = generate_summary()
+    #        if channel and send_to_slack(summary, channel):
+    #            st.success(f"Summary sent to Slack channel: {channel}")
+    #        else:
+    #            st.error("Failed to send summary to Slack")
+
+                
+    # Sidebar
     with st.sidebar:
         st.image("logo-transparent-png (1).png", use_column_width=True)
         st.subheader("Your Interview Docs")
         
-        if 'google_credentials' not in st.session_state:
-            credentials = authenticate_google_drive()
-            if credentials:
-                st.session_state.google_credentials = credentials
-                st.rerun()
+        # Display uploaded file names
+        if st.session_state.uploaded_files:
+            st.write("Uploaded files:")
+            for file in st.session_state.uploaded_files:
+                st.write(f"- {file}")
+        else:
+            st.write("No files uploaded yet.")
 
-        slack_credentials = authenticate_slack()
-
-        if "google_credentials" in st.session_state:
-            service = create_google_drive_service(st.session_state.google_credentials)
-            relevant_files = fetch_google_drive_files(service)
-
-            selected_files = st.multiselect(
-                "Select files from Google Drive",
-                options=[f['name'] for f in relevant_files]
-            )
-
-            if selected_files and st.button("Process Selected Files"):
-                with st.spinner("Processing files..."):
-                    combined_text = ""
-                    for file_name in selected_files:
-                        file = next(f for f in relevant_files if f['name'] == file_name)
-                        file_content = download_file(service, file['id'], file['mimeType'])
-                        if file_content:
-                            combined_text += f"File: {file_name}\n\n{file_content}\n\n"
-
-                    if combined_text:
-                        text_chunks = get_text_chunks(combined_text)
-                        vectorstore = get_vectorstore(text_chunks)
-                        st.session_state.conversation = get_conversation_chain(vectorstore)
-                        st.success("Files processed successfully!")
-                    else:
-                        st.error("Failed to retrieve file content")
-
-        pdf_docs = st.file_uploader(
-            "Upload your interview notes or transcripts", accept_multiple_files=True)
-            
-        if pdf_docs:
-            if st.button("Upload"):
-                with st.spinner("Uploading"):
-                    # get pdf contents
-                    raw_text = get_pdf_text(pdf_docs)
-                    st.session_state.raw_text = raw_text
-                    st.write(raw_text)
-                   
-                    # break pdf contents into text chunks
-                    text_chunks = get_text_chunks(raw_text)
-                    st.session_state.text_chunks = text_chunks
-
-                    # create vector store
-                    vectorstore = get_vectorstore(text_chunks)
-
-                    # conversation chain created
-                    st.session_state.conversation = get_conversation_chain(vectorstore)
-
-        st.subheader("Or Paste Text")
-        user_text = st.text_area("Paste text here")
-       
-        if user_text:
-            if st.button("Process Text"):
-                with st.spinner("Processing"):
-                    text_chunks = get_text_chunks(user_text)
-                    vectorstore = get_vectorstore(text_chunks)
-                    st.session_state.conversation = get_conversation_chain(vectorstore)
+        #slack_credentials = authenticate_slack()
 
 if __name__ == '__main__':
     main()
